@@ -21,7 +21,7 @@ concurrency:
 jobs:
   build:
     # madeira-bcd: runs only in the owner's repository; a fork's run is skipped.
-    if: github.repository == 'thebcd69/madeira-bcd'
+    # Fork build (icbto09/bcd-gamesTestFixes): the owner-only condition is removed so the job runs here.
     runs-on: macos-15
     # contents: write only so the token can see DRAFT releases, which is where
     # the Metal Shader Converter installer is kept (drafts are not public).
@@ -1482,7 +1482,7 @@ jobs:
             app/Madeira/licenses/SPIRV-Cross-Apache-2.0.txt
             app/Madeira/licenses/SPIRV-Tools-Apache-2.0.txt
             app/Madeira/licenses/cereal-BSD-3-Clause.txt
-          key: opengl-libs-v1-${{ hashFiles('build/mesa-ios/build.sh', 'build/mesa-ios/ios-arm64.cross', 'build/mesa-ios/patches/*.patch', 'build/moltenvk-ios/build.sh') }}
+          key: opengl-libs-v1-${{ hashFiles('build/mesa-ios/build.sh', 'build/mesa-ios/ios-arm64.cross', 'build/mesa-ios/patches/*.patch', 'build/moltenvk-ios/build.sh', 'build/moltenvk-ios/*.patch') }}
 
       - name: Build MoltenVK for iOS
         if: steps.glcache.outputs.cache-hit != 'true'
@@ -1504,7 +1504,7 @@ jobs:
             app/Madeira/licenses/SPIRV-Cross-Apache-2.0.txt
             app/Madeira/licenses/SPIRV-Tools-Apache-2.0.txt
             app/Madeira/licenses/cereal-BSD-3-Clause.txt
-          key: opengl-libs-v1-${{ hashFiles('build/mesa-ios/build.sh', 'build/mesa-ios/ios-arm64.cross', 'build/mesa-ios/patches/*.patch', 'build/moltenvk-ios/build.sh') }}
+          key: opengl-libs-v1-${{ hashFiles('build/mesa-ios/build.sh', 'build/mesa-ios/ios-arm64.cross', 'build/mesa-ios/patches/*.patch', 'build/moltenvk-ios/build.sh', 'build/moltenvk-ios/*.patch') }}
 
       # A game's own *.log lines (errors, GPU / driver / display lines) in the
       # session log as [guest-log] -- the mirror this fork's wine had before the
@@ -5191,8 +5191,18 @@ jobs:
       # owner's PRIVATE bucket, never in the repository) and put both signed IPAs
       # plus installation pages (7-day pre-signed links) in the same bucket.
       # A signing/upload failure is caught by the private-bucket gate below.
+      # Fork build: this fork has no private bucket or signing certificate, so the unsigned IPAs are
+      # kept as a run artifact, and the two owner-only steps below are skipped.
+      - name: Upload unsigned IPAs (fork build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: BCD-unsigned-ipa
+          path: build-out/*-unsigned.ipa
+          if-no-files-found: error
+
       - name: Sign for OTA install (private bucket)
         id: ota
+        if: github.repository == 'thebcd69/madeira-bcd'
         continue-on-error: true
         env:
           B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
@@ -5215,7 +5225,7 @@ jobs:
       # private R2 bucket (the OTA step above). If that step did not succeed,
       # the build fails here instead of keeping the IPA somewhere public.
       - name: Check the IPA reached the private bucket
-        if: steps.ota.outcome != 'success'
+        if: github.repository == 'thebcd69/madeira-bcd' && steps.ota.outcome != 'success'
         run: |
           echo "::error::OTA signing/upload did not succeed: this build's IPA was not kept anywhere (no GitHub artifact by design)"
           exit 1
