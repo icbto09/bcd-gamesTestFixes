@@ -621,6 +621,17 @@ static void bcd_vulkan_session_setup(NSFileManager *fm, NSString *prefix, NSStri
         return;
     }
     setenv("MADEIRA_VULKAN_LIBRARY", lib.UTF8String, 1);   /* read by build/win32u-unix/vulkan_ios.c */
+    /* Fork fix (desktop sessions): with the Wine desktop the session is explorer.exe's, not ARM64EC, and only sysx64 is linked below. A
+     * vulkan-1.dll link left in system32 (the farm's stand-in) is then what an x64 game loads first: no winevulkan, and the game reports
+     * no Vulkan graphics card until a direct launch relinks system32. Without it the loader falls back to sysx64, which holds the real one. */
+    if (!use_arm64ec)
+        for (NSString *dll in dlls) {
+            NSString *path = [[win stringByAppendingPathComponent:@"system32"] stringByAppendingPathComponent:dll];
+            NSString *dest = [fm destinationOfSymbolicLinkAtPath:path error:nil];
+            if (!dest) continue;
+            dprintf(STDERR_FILENO, "[WineProc] vulkan: removed system32 %s (a link to %s) so the game loads sysx64's\n", dll.UTF8String, dest.UTF8String);
+            [fm removeItemAtPath:path error:nil];
+        }
     for (NSString *dir in dirs)
         for (NSString *dll in dlls) {
             NSString *dst = [[win stringByAppendingPathComponent:dir] stringByAppendingPathComponent:dll];
