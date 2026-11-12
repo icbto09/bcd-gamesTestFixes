@@ -12,7 +12,9 @@
 # and the Vulkan headers into External/; the first run takes a while.
 #
 # madeira-bcd: the same script as Madeira's apart from the place of the source, the
-# commit check and the clone; MoltenVK itself is used unmodified.
+# commit check and the clone.
+# Fork change: build/moltenvk-ios/[0-9]*.patch are applied to the source before the build
+# (see the loop below). Without any patch file MoltenVK is used unmodified, as before.
 set -eu
 R="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SRC="${MOLTENVK_SRC:-$R/toolchains/MoltenVK}"
@@ -31,6 +33,23 @@ if [ "$(git -C "$SRC" rev-parse HEAD)" != "$MVK_COMMIT" ]; then
 fi
 
 cd "$SRC"
+
+# Fork patches to MoltenVK, applied once (the marker keeps re-runs idempotent). They change
+# MoltenVK code and are offered under its licence (Apache 2.0). The commit check above still
+# passes: the patches change the working tree, not the checked-out commit.
+#   0001-madeira-evict-pipeline-states.patch   env MADEIRA_MVK_EVICT_PIPELINES=1
+#   0002-madeira-drop-shader-libraries.patch   env MADEIRA_MVK_DROP_SHADER_LIBRARIES=1
+#   0003-madeira-null-pipeline-bind.patch      always on: a null pipeline bind no longer crashes
+HERE="$R/build/moltenvk-ios"
+for p in "$HERE"/[0-9]*.patch; do
+    [ -e "$p" ] || continue
+    m="$SRC/.madeira-applied-$(basename "$p")"
+    if [ ! -f "$m" ]; then
+        patch -d "$SRC" -p1 --forward < "$p"
+        touch "$m"
+    fi
+done
+
 [ -d External/build ] || ./fetchDependencies --ios
 # MOLTENVK_JOBS: xcodebuild's -jobs (default: Xcode's own choice). The Makefile finds xcodebuild on the PATH and turns every variable given on
 # its command line into a preprocessor definition, so a shim in front of it is the way to add the flag.
